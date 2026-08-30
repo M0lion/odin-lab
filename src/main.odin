@@ -1,21 +1,10 @@
 package main
 
-import "core:fmt"
 import "core:log"
 import "vendor:sdl3"
 
 main :: proc() {
-	fmt.println("Hello")
 	context.logger = log.create_console_logger()
-
-	a := Test {
-		x = 5,
-		y = 2,
-	}
-
-	TestProc(a)
-
-	fmt.println("asd")
 
 	if !sdl3.Init({.VIDEO}) {
 		log.error("Failed to init sdl")
@@ -35,16 +24,10 @@ main :: proc() {
 			}
 		}
 
-		sdl3.SetRenderDrawColor(renderer, 1, 0, 1, 1)
+		sdl3.SetRenderDrawColor(renderer, 255, 0, 255, 255)
 		sdl3.RenderClear(renderer)
+		sdl3.SetRenderDrawColor(renderer, 255, 255, 255, 255)
+		sdl3.RenderFillRect(renderer, &sdl3.FRect{w = 50, h = 50, x = 50, y = 50})
 		sdl3.RenderPresent(renderer)
 	}
-}
-
-Test :: struct {
-	x, y: int,
-}
-
-TestProc :: proc(test: Test) {
-	log.info(test)
 }
