@@ -16,14 +16,29 @@ main :: proc() {
 	running := true
 	event: sdl3.Event
 
+	viewport := sdl3.Rect {
+		x = 0,
+		y = 0,
+		w = 800,
+		h = 600,
+	}
+
 	for running {
 		for sdl3.PollEvent(&event) {
 			#partial switch event.type {
 			case .QUIT:
 				running = false
+			case sdl3.EventType.KEY_DOWN:
+				switch event.key.key {
+				case sdl3.K_W:
+					viewport.y -= 5
+				case sdl3.K_S:
+					viewport.y += 5
+				}
 			}
 		}
 
+		sdl3.SetRenderViewport(renderer, &viewport)
 		sdl3.SetRenderDrawColor(renderer, 255, 0, 255, 255)
 		sdl3.RenderClear(renderer)
 		sdl3.SetRenderDrawColor(renderer, 255, 255, 255, 255)
