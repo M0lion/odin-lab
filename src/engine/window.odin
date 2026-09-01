@@ -101,3 +101,20 @@ DestroyWindow :: proc(window: ^Window) {
 	ttf.Quit()
 	sdl3.QuitSubSystem({.VIDEO})
 }
+
+SetWindowViewport :: proc(window: ^Window, viewport: [4]f32) {
+	sdl3.SetRenderViewport(
+		window.internal.renderer,
+		&sdl3.Rect {
+			x = i32(viewport.x),
+			y = i32(viewport.y),
+			w = i32(viewport.z) + 1,
+			h = i32(viewport.w) + 1,
+		},
+	)
+	sdl3.SetRenderScale(
+		window.internal.renderer,
+		window.size.x / viewport.z,
+		window.size.y / viewport.w,
+	)
+}

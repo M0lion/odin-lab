@@ -1,5 +1,6 @@
 package engine
 
+import "core:log"
 import "vendor:box2d"
 
 Physics :: struct {
@@ -8,7 +9,7 @@ Physics :: struct {
 
 CreatePhysics :: proc() -> Physics {
 	worldDef := box2d.DefaultWorldDef()
-	worldDef.gravity = [2]f32{0, 10}
+	worldDef.gravity = [2]f32{0, 0}
 	worldId := box2d.CreateWorld(worldDef)
 
 	return Physics{worldId = worldId}
@@ -28,17 +29,37 @@ GetBodyPos :: proc(body: Body) -> [2]f32 {
 	return box2d.Body_GetPosition(body)
 }
 
+GetBodyAngle :: proc(body: Body) -> f32 {
+	rot := box2d.Body_GetRotation(body)
+	angle := box2d.Rot_GetAngle(rot)
+	return angle
+}
+
 CreateRectangle :: proc(physics: ^Physics, pos: [2]f32, size: [2]f32, angle: f32) -> Body {
 	bodyDef := box2d.DefaultBodyDef()
 	bodyDef.type = .dynamicBody
 	bodyDef.position = pos
 	bodyDef.rotation = box2d.MakeRot(angle)
+
+	// Stupid shit
+	bodyDef.angularDamping = 0
+	bodyDef.linearDamping = 0
+	bodyDef.enableSleep = false
+	bodyDef.isBullet = true
+
 	bodyId := box2d.CreateBody(physics.worldId, bodyDef)
 
 	shapeDef := box2d.DefaultShapeDef()
 	shapeDef.density = 1
+
+	// Stupid shit
+	shapeDef.material.restitution = 1
+	shapeDef.material.friction = 0
+
 	box := box2d.MakeBox(size.x / 2, size.y / 2)
 	shapeId := box2d.CreatePolygonShape(bodyId, shapeDef, &box)
+
+	log.info("Creating Rect: ", pos, size)
 
 	return bodyId
 }
@@ -52,6 +73,10 @@ CreateBoundingBox :: proc(physics: ^Physics, rect: [4]f32) -> Body {
 	bodyId := box2d.CreateBody(physics.worldId, bodyDef)
 
 	shapeDef := box2d.DefaultShapeDef()
+
+	// Stupid shit
+	shapeDef.material.restitution = 1
+	shapeDef.material.friction = 0
 
 	// corners (y-down: y is top, y+h is bottom)
 	tl := [2]f32{x, y} // top-left

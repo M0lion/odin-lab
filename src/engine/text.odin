@@ -76,3 +76,31 @@ RenderText :: proc(text: ^Text, pos: [2]f32) {
 		log.error("Failed to draw text: ", sdl3.GetError())
 	}
 }
+
+CreateSurfaceFromText :: proc(
+	font: ^Font,
+	text: string,
+	color: [4]f32,
+	background: [4]f32,
+) -> ^Surface {
+	text := strings.clone_to_cstring(text)
+	defer delete(text)
+	surface := ttf.RenderText_Shaded(
+		font.sdlFont,
+		text,
+		0,
+		{u8(color.r * 255), u8(color.g * 255), u8(color.b * 255), u8(color.a * 255)},
+		{
+			u8(background.r * 255),
+			u8(background.g * 255),
+			u8(background.b * 255),
+			u8(background.a * 255),
+		},
+	)
+
+	if surface == nil {
+		log.error("Failed to draw text to surface: ", text, sdl3.GetError())
+	}
+
+	return surface
+}
