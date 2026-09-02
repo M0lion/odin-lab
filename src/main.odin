@@ -1,15 +1,32 @@
 package main
 
+import "core:flags"
 import "core:log"
 import "core:os"
 
-main :: proc() {
-	context.logger = log.create_console_logger()
+Vector2 :: [2]f32
 
-	if !brownianMewb() {
-		log.error("App crashed")
-		os.exit(1)
-	}
+Programs :: enum {
+	BrownianMewb,
+	Test,
 }
 
-Vector2 :: [2]f32
+Options :: struct {
+	program: Programs `args:"name=Program,required"usage:"Program to run"`,
+}
+
+main :: proc() {
+	context.logger = log.create_console_logger()
+	opts: Options
+	flags.parse_or_exit(&opts, os.args, .Odin)
+
+	switch opts.program {
+	case .BrownianMewb:
+		if !brownianMewb() {
+			log.error("App crashed")
+			os.exit(1)
+		}
+	case .Test:
+		log.info("Test")
+	}
+}
