@@ -3,16 +3,17 @@ package main
 import "core:flags"
 import "core:log"
 import "core:os"
+import "labyrinth"
 
 Vector2 :: [2]f32
 
 Programs :: enum {
-	BrownianMewb,
-	Test,
+	labyrinth,
+	brownian,
 }
 
 Options :: struct {
-	program: Programs `args:"name=Program,required"usage:"Program to run"`,
+	program: Programs `args:"name=Program"usage:"Program to run"`,
 }
 
 main :: proc() {
@@ -21,12 +22,15 @@ main :: proc() {
 	flags.parse_or_exit(&opts, os.args, .Odin)
 
 	switch opts.program {
-	case .BrownianMewb:
+	case .labyrinth:
+		if !labyrinth.run() {
+			log.error("App crashed")
+			os.exit(1)
+		}
+	case .brownian:
 		if !brownianMewb() {
 			log.error("App crashed")
 			os.exit(1)
 		}
-	case .Test:
-		log.info("Test")
 	}
 }

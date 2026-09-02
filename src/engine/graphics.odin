@@ -1,6 +1,5 @@
 package engine
 
-import "core:log"
 import "vendor:sdl3"
 
 Surface :: sdl3.Surface
@@ -48,4 +47,22 @@ DrawTexture :: proc(
 		nil,
 		.NONE,
 	)
+}
+
+DrawRect :: proc(window: ^Window, rect: [4]f32, color: [4]f32) {
+	rect := sdl3.FRect {
+		x = rect.x,
+		y = rect.y,
+		w = rect.z,
+		h = rect.w,
+	}
+	color := color * 255
+	sdl3.SetRenderDrawColor(
+		window.internal.renderer,
+		u8(color.r),
+		u8(color.g),
+		u8(color.b),
+		u8(color.a),
+	)
+	sdl3.RenderFillRect(window.internal.renderer, &rect)
 }
