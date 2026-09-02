@@ -6,9 +6,15 @@ import "vendor:sdl3"
 import "vendor:sdl3/ttf"
 
 Window :: struct {
-	internal:   WindowInternal,
-	shouldQuit: bool,
-	size:       [2]f32,
+	internal:       WindowInternal,
+	shouldQuit:     bool,
+	size:           [2]f32,
+	resizedHandler: Maybe(ResizedHandler),
+}
+
+ResizedHandler :: struct {
+	handler: proc(data: rawptr, window: ^Window, size: [2]f32),
+	data:    rawptr,
 }
 
 @(private)
@@ -38,8 +44,14 @@ UpdateWindow :: proc(window: ^Window) {
 	if !sdl3.GetWindowSize(window.internal.sdlWindow, &w, &h) {
 		log.error("Could not get window size: ", sdl3.GetError())
 	} else {
-		window.size.x = f32(w)
-		window.size.y = f32(h)
+		newSize := [2]f32{f32(w), f32(h)}
+		if newSize != window.size {
+			window.size = newSize
+
+			if handler, ok := window.resizedHandler.?; ok {
+				handler.handler(handler.data, window, newSize)
+			}
+		}
 	}
 
 	renderer := window.internal.renderer
@@ -92,7 +104,7 @@ CreateWindow :: proc(title: string, width: i32, height: i32) -> (Window, bool) {
 		return {}, false
 	}
 
-	return Window{internal, false, [2]f32{f32(width), f32(height)}}, true
+	return Window{internal, false, [2]f32{f32(width), f32(height)}, nil}, true
 }
 
 DestroyWindow :: proc(window: ^Window) {
