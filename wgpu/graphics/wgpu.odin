@@ -1,27 +1,34 @@
 package graphics
 
 import "base:runtime"
+import "core:fmt"
 import "core:log"
-import "core:os"
 import "vendor:glfw"
 import "vendor:wgpu"
 import "vendor:wgpu/glfwglue"
 
+FRect :: [4]f32
+Color :: [4]f32
+
 GraphicsContext :: struct {
-	callbackContext:      runtime.Context,
-	adapter:              wgpu.Adapter,
-	device:               wgpu.Device,
-	instance:             wgpu.Instance,
-	surface:              wgpu.Surface,
-	surfaceConfiguration: wgpu.SurfaceConfiguration,
-	pipeline:             wgpu.RenderPipeline,
-	pipelineLayout:       wgpu.PipelineLayout,
-	shader:               wgpu.ShaderModule,
-	queue:                wgpu.Queue,
+	callbackContext:          runtime.Context,
+	adapter:                  wgpu.Adapter,
+	device:                   wgpu.Device,
+	instance:                 wgpu.Instance,
+	surface:                  wgpu.Surface,
+	surfaceConfiguration:     wgpu.SurfaceConfiguration,
+	queue:                    wgpu.Queue,
+	coloredRectanglePipeline: ColoredRectanglePipeline,
+	activeRenderPass:         Maybe(RenderPass),
+}
+
+DrawRectangle :: proc {
+	DrawColoredRectangle,
 }
 
 CreateGraphicsContext :: proc(windowHandle: glfw.WindowHandle) -> ^GraphicsContext {
 	gc := new(GraphicsContext)
+	gc.callbackContext = context
 	gc.instance = wgpu.CreateInstance(nil)
 	if gc.instance == nil {
 		panic("Could not create wgpu instance")
@@ -58,47 +65,92 @@ CreateGraphicsContext :: proc(windowHandle: glfw.WindowHandle) -> ^GraphicsConte
 	wgpu.SurfaceConfigure(gc.surface, &gc.surfaceConfiguration)
 	gc.queue = wgpu.DeviceGetQueue(gc.device)
 
-	shaderSrc, err := os.read_entire_file_from_path("./shader.wgsl", context.allocator)
-	if err != nil {
-		log.error("Failed to read file: ", err)
-		panic("Failed to read file")
-	}
-
-	gc.shader = CreateShader(gc.device, string(shaderSrc))
-
-	gc.pipelineLayout = wgpu.DeviceCreatePipelineLayout(gc.device, &{})
-	gc.pipeline = wgpu.DeviceCreateRenderPipeline(
-		gc.device,
-		&{
-			layout = gc.pipelineLayout,
-			vertex = {module = gc.shader, entryPoint = "vs_main"},
-			fragment = &{
-				module      = gc.shader,
-				entryPoint  = "fs_main",
-				targetCount = 1,
-				targets     = &wgpu.ColorTargetState {
-					format    = gc.surfaceConfiguration.format, // TODO: Figure out if needs to be the same
-					writeMask = wgpu.ColorWriteMaskFlags_All,
-				},
-			},
-			primitive = {topology = .TriangleList},
-			multisample = {count = 1, mask = 0xFFFFFFFF},
-		},
-	)
+	gc.coloredRectanglePipeline = CreateColoredRectanglePipeline(gc)
 
 	return gc
 }
 
 DestroyGraphicsContext :: proc(gc: ^GraphicsContext) {
-	wgpu.RenderPipelineRelease(gc.pipeline)
-	wgpu.PipelineLayoutRelease(gc.pipelineLayout)
-	DestroyShader(gc.shader)
+	DestroyColoredRectanglePipeline(&gc.coloredRectanglePipeline)
 	wgpu.QueueRelease(gc.queue)
 	wgpu.DeviceRelease(gc.device)
 	wgpu.AdapterRelease(gc.adapter)
 	wgpu.SurfaceRelease(gc.surface)
 	wgpu.InstanceRelease(gc.instance)
 	free(gc)
+}
+
+RenderPass :: struct {
+	frame:             wgpu.TextureView,
+	commandEncoder:    wgpu.CommandEncoder,
+	renderPassEncoder: wgpu.RenderPassEncoder,
+	surfaceTexture:    wgpu.SurfaceTexture,
+}
+
+BeginRenderPass :: proc(gc: ^GraphicsContext, window: glfw.WindowHandle) -> bool {
+	rp: RenderPass = {}
+	rp.surfaceTexture = wgpu.SurfaceGetCurrentTexture(gc.surface)
+	switch rp.surfaceTexture.status {
+	case .SuccessOptimal, .SuccessSuboptimal:
+	// All good, could handle suboptimal here.
+	case .Timeout, .Outdated, .Lost:
+		// Skip this frame, and re-configure surface.
+		if rp.surfaceTexture.texture != nil {
+			wgpu.TextureRelease(rp.surfaceTexture.texture)
+		}
+		width, height := glfw.GetFramebufferSize(window)
+		gc.surfaceConfiguration.width = u32(width)
+		gc.surfaceConfiguration.height = u32(height)
+		wgpu.SurfaceConfigure(gc.surface, &gc.surfaceConfiguration)
+		return false
+	case .Occluded:
+		// Window is occluded (e.g. minimized), skip this frame.
+		return false
+	case .Error:
+		// Fatal error
+		fmt.panicf("[triangle] get_current_texture status=%v", rp.surfaceTexture.status)
+	}
+
+	rp.frame = wgpu.TextureCreateView(rp.surfaceTexture.texture, nil)
+
+	rp.commandEncoder = wgpu.DeviceCreateCommandEncoder(gc.device, nil)
+
+	rp.renderPassEncoder = wgpu.CommandEncoderBeginRenderPass(
+		rp.commandEncoder,
+		&{
+			colorAttachmentCount = 1,
+			colorAttachments = &wgpu.RenderPassColorAttachment {
+				view = rp.frame,
+				loadOp = .Clear,
+				storeOp = .Store,
+				depthSlice = wgpu.DEPTH_SLICE_UNDEFINED,
+				clearValue = {0, 1, 0, 1},
+			},
+		},
+	)
+
+	gc.activeRenderPass = rp
+	return true
+}
+
+EndRenderPass :: proc(gc: ^GraphicsContext) {
+	rp, ok := gc.activeRenderPass.?
+	if !ok {
+		log.error("Tried to end render with no active render pass")
+		return
+	}
+	wgpu.RenderPassEncoderEnd(rp.renderPassEncoder)
+	wgpu.RenderPassEncoderRelease(rp.renderPassEncoder)
+
+	commandBuffer := wgpu.CommandEncoderFinish(rp.commandEncoder, nil)
+	defer wgpu.CommandBufferRelease(commandBuffer)
+
+	wgpu.QueueSubmit(gc.queue, {commandBuffer})
+	wgpu.SurfacePresent(gc.surface)
+	wgpu.CommandEncoderRelease(rp.commandEncoder)
+	wgpu.TextureViewRelease(rp.frame)
+	wgpu.TextureRelease(rp.surfaceTexture.texture)
+	gc.activeRenderPass = nil
 }
 
 CreateShader :: proc(device: wgpu.Device, src: string) -> wgpu.ShaderModule {
@@ -131,7 +183,21 @@ on_adapter :: proc "c" (
 
 	gc.adapter = adapter
 
-	wgpu.AdapterRequestDevice(gc.adapter, nil, {callback = on_device, userdata1 = gc})
+	limits, limits_status := wgpu.AdapterGetLimits(adapter)
+	if limits_status != .Success {
+		log.error("Failed to get limits")
+		panic("Failed to get limits")
+	}
+	limits.maxImmediateSize = 128
+	wgpu.AdapterRequestDevice(
+		gc.adapter,
+		&wgpu.DeviceDescriptor {
+			requiredFeatureCount = 1,
+			requiredFeatures = raw_data([]wgpu.FeatureName{.Immediates}),
+			requiredLimits = &limits,
+		},
+		{callback = on_device, userdata1 = gc},
+	)
 }
 
 @(private = "file")
