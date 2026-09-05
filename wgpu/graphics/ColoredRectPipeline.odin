@@ -2,6 +2,8 @@
 package graphics
 
 import "core:log"
+import "core:math"
+import "core:math/linalg"
 import "vendor:wgpu"
 
 shader :: #load("./ColoredRectangle.wgsl", string)
@@ -16,18 +18,21 @@ RectPC :: struct {
 	pos: [4]f32,
 }
 
-DrawColoredRectangle :: proc(gc: ^GraphicsContext, rect: ^FRect, color: ^Color) {
+DrawColoredRectangle :: proc(gc: ^GraphicsContext, rect: ^FRect, color: ^Color, camera: ^Camera) {
 	rp, ok := gc.activeRenderPass.?
 	if !ok {
 		log.error("Tried to draw rectangle with no active render pass")
 		return
 	}
+	transform := linalg.matrix4_translate_f32([3]f32{rect.x, rect.y, 0})
+	transform *= linalg.matrix4_rotate_f32((math.PI * 2) * 1 / 8, [3]f32{0, 0, 1})
+	UseCamera(rp.renderPassEncoder, camera)
 	wgpu.RenderPassEncoderSetPipeline(rp.renderPassEncoder, gc.coloredRectanglePipeline.pipeline)
 	wgpu.RenderPassEncoderSetImmediates(
 		rp.renderPassEncoder,
 		0, // offset
-		&RectPC{[4]f32{rect.x, rect.y, 0, 0}}, // data
-		size_of(RectPC), // size
+		&transform, // data
+		size_of(matrix[4, 4]f32), // size
 	)
 	wgpu.RenderPassEncoderDraw(rp.renderPassEncoder, 4, 1, 0, 0)
 }
@@ -37,13 +42,17 @@ CreateColoredRectanglePipeline :: proc(gc: ^GraphicsContext) -> ColoredRectangle
 
 	pipe.shader = CreateShader(gc.device, string(shader))
 
+	cameraBGL := GetCameraBindGroupLayout(gc)
 	layout := wgpu.PipelineLayoutDescriptor {
-		immediateSize = size_of(RectPC),
+		immediateSize        = size_of(matrix[4, 4]f32),
+		bindGroupLayoutCount = 1,
+		bindGroupLayouts     = &cameraBGL,
 	}
 	pipe.pipelineLayout = wgpu.DeviceCreatePipelineLayout(gc.device, &layout)
 	pipe.pipeline = wgpu.DeviceCreateRenderPipeline(
 		gc.device,
 		&{
+			label = "ColoredRectanglePipeline",
 			layout = pipe.pipelineLayout,
 			vertex = {module = pipe.shader, entryPoint = "vs_main"},
 			fragment = &{

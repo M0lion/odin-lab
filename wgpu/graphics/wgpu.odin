@@ -20,6 +20,7 @@ GraphicsContext :: struct {
 	queue:                    wgpu.Queue,
 	coloredRectanglePipeline: ColoredRectanglePipeline,
 	activeRenderPass:         Maybe(RenderPass),
+	width, height:            u32,
 }
 
 DrawRectangle :: proc {
@@ -52,6 +53,8 @@ CreateGraphicsContext :: proc(windowHandle: glfw.WindowHandle) -> ^GraphicsConte
 
 	width, height := glfw.GetFramebufferSize(windowHandle)
 
+	gc.width = u32(width)
+	gc.height = u32(height)
 	gc.surfaceConfiguration = wgpu.SurfaceConfiguration {
 		device      = gc.device,
 		usage       = {.RenderAttachment},
