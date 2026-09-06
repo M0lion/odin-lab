@@ -59,7 +59,11 @@ camera_2d :: proc(wdith: f32, aspect: f32, center: [2]f32) -> matrix[4, 4]f32 {
 }
 
 UpdateCamera :: proc(camera: ^Camera, gc: ^GraphicsContext) {
-	transform := camera_2d(camera.width, f32(gc.width) / f32(gc.height), camera.position)
+	transform := camera_2d(
+		camera.width,
+		f32(gc.surfaceConfiguration.width) / f32(gc.surfaceConfiguration.height),
+		camera.position,
+	)
 	transform *= linalg.matrix4_rotate_f32(camera.rotation, [3]f32{0, 0, 1})
 	wgpu.QueueWriteBuffer(gc.queue, camera.buffer, 0, &transform, size_of(transform))
 }

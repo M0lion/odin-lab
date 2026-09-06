@@ -7,6 +7,8 @@ import "vendor:glfw"
 import "vendor:wgpu"
 import "vendor:wgpu/glfwglue"
 
+MSAA_SAMPLE_COUNT :: 4
+
 FRect :: [4]f32
 Color :: [4]f32
 
@@ -20,6 +22,8 @@ GraphicsContext :: struct {
 	queue:                    wgpu.Queue,
 	coloredRectanglePipeline: ColoredRectanglePipeline,
 	activeRenderPass:         Maybe(RenderPass),
+	msaaTexture:              wgpu.Texture,
+	msaaTextureView:          wgpu.TextureView,
 }
 
 DrawRectangle :: proc {
@@ -29,6 +33,27 @@ DrawRectangle :: proc {
 CreateGraphicsContext :: proc(windowHandle: glfw.WindowHandle) -> ^GraphicsContext {
 	gc := new(GraphicsContext)
 	gc.callbackContext = context
+
+	wgpu.SetLogCallback(proc "c" (level: wgpu.LogLevel, message: string, userdata: rawptr) {
+			gc := (^GraphicsContext)(userdata)
+			context = gc.callbackContext
+			logger := log.error
+			#partial switch level {
+			case .Error:
+				logger = log.error
+			case .Warn:
+				logger = log.warn
+			case .Info:
+				logger = log.info
+			case .Debug:
+				logger = log.debug
+			case .Trace:
+				return
+			}
+			logger("[wgpu]", message)
+		}, gc)
+	wgpu.SetLogLevel(.Trace)
+
 	gc.instance = wgpu.CreateInstance(nil)
 	if gc.instance == nil {
 		panic("Could not create wgpu instance")
@@ -63,8 +88,11 @@ CreateGraphicsContext :: proc(windowHandle: glfw.WindowHandle) -> ^GraphicsConte
 	}
 
 	resize(gc, width, height)
+	gc.coloredRectanglePipeline = CreateColoredRectanglePipeline(gc)
 	gc.queue = wgpu.DeviceGetQueue(gc.device)
 
+	wgpu.DevicePoll(gc.device, true)
+	wgpu.InstanceProcessEvents(gc.instance)
 	return gc
 }
 
@@ -81,9 +109,31 @@ DestroyGraphicsContext :: proc(gc: ^GraphicsContext) {
 resize :: proc(gc: ^GraphicsContext, width: i32, height: i32) {
 	width := u32(width)
 	height := u32(height)
+
+	// Reconfigure surface
 	gc.surfaceConfiguration.width = width
 	gc.surfaceConfiguration.height = height
 	wgpu.SurfaceConfigure(gc.surface, &gc.surfaceConfiguration)
+
+	// Release and recreate MSAA texture(view)
+	if gc.msaaTextureView != nil do wgpu.TextureViewRelease(gc.msaaTextureView)
+	if gc.msaaTexture != nil do wgpu.TextureRelease(gc.msaaTexture)
+
+	msaaTextureDescriptor := wgpu.TextureDescriptor {
+		label = "msaa texture",
+		usage = {.RenderAttachment},
+		sampleCount = MSAA_SAMPLE_COUNT,
+		mipLevelCount = 1,
+		dimension = ._2D,
+		format = gc.surfaceConfiguration.format,
+		size = {
+			width = gc.surfaceConfiguration.width,
+			height = gc.surfaceConfiguration.height,
+			depthOrArrayLayers = 1,
+		},
+	}
+	gc.msaaTexture = wgpu.DeviceCreateTexture(gc.device, &msaaTextureDescriptor)
+	gc.msaaTextureView = wgpu.TextureCreateView(gc.msaaTexture, nil)
 }
 
 RenderPass :: struct {
@@ -124,9 +174,10 @@ BeginRenderPass :: proc(gc: ^GraphicsContext, window: glfw.WindowHandle) -> bool
 		&{
 			colorAttachmentCount = 1,
 			colorAttachments = &wgpu.RenderPassColorAttachment {
-				view = rp.frame,
+				resolveTarget = rp.frame,
+				view = gc.msaaTextureView,
 				loadOp = .Clear,
-				storeOp = .Store,
+				storeOp = .Discard,
 				depthSlice = wgpu.DEPTH_SLICE_UNDEFINED,
 				clearValue = {0, 1, 0, 1},
 			},
@@ -199,9 +250,23 @@ on_adapter :: proc "c" (
 			requiredFeatureCount = 1,
 			requiredFeatures = raw_data([]wgpu.FeatureName{.Immediates}),
 			requiredLimits = &limits,
+			uncapturedErrorCallbackInfo = {callback = uncapturedErrorCallback, userdata1 = gc},
 		},
 		{callback = on_device, userdata1 = gc},
 	)
+}
+
+@(private = "file")
+uncapturedErrorCallback :: proc "c" (
+	device: ^wgpu.Device,
+	type: wgpu.ErrorType,
+	message: string,
+	userdata1: rawptr,
+	userdata2: rawptr,
+) {
+	gc := (^GraphicsContext)(userdata1)
+	context = gc.callbackContext
+	log.error("[wgpu]: ", type, message)
 }
 
 @(private = "file")

@@ -69,7 +69,7 @@ CreateColoredRectanglePipeline :: proc(gc: ^GraphicsContext) -> ColoredRectangle
 				},
 			},
 			primitive = {topology = .TriangleStrip},
-			multisample = {count = 1, mask = 0xFFFFFFFF},
+			multisample = {count = 4, mask = 0xFFFFFFFF, alphaToCoverageEnabled = false},
 		},
 	)
 

@@ -8,8 +8,7 @@ import g "graphics"
 import "vendor:glfw"
 
 main :: proc() {
-	context.logger = log.create_console_logger()
-	log.info("Info")
+	context.logger = log.create_console_logger(lowest = .Info)
 	glfw.Init()
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
 	window := glfw.CreateWindow(500, 500, "WGPU", nil, nil)
