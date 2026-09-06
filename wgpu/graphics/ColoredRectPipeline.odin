@@ -15,7 +15,8 @@ ColoredRectanglePipeline :: struct {
 }
 
 RectPC :: struct {
-	pos: [4]f32,
+	transform: matrix[4, 4]f32,
+	color:     [4]f32,
 }
 
 DrawColoredRectangle :: proc(gc: ^GraphicsContext, rect: ^FRect, color: ^Color, camera: ^Camera) {
@@ -25,14 +26,17 @@ DrawColoredRectangle :: proc(gc: ^GraphicsContext, rect: ^FRect, color: ^Color, 
 		return
 	}
 	transform := linalg.matrix4_translate_f32([3]f32{rect.x, rect.y, 0})
-	transform *= linalg.matrix4_rotate_f32((math.PI * 2) * 1 / 8, [3]f32{0, 0, 1})
+	rectData := RectPC {
+		transform = transform,
+		color     = color^,
+	}
 	UseCamera(rp.renderPassEncoder, camera)
 	wgpu.RenderPassEncoderSetPipeline(rp.renderPassEncoder, gc.coloredRectanglePipeline.pipeline)
 	wgpu.RenderPassEncoderSetImmediates(
 		rp.renderPassEncoder,
 		0, // offset
-		&transform, // data
-		size_of(matrix[4, 4]f32), // size
+		&rectData, // data
+		size_of(RectPC), // size
 	)
 	wgpu.RenderPassEncoderDraw(rp.renderPassEncoder, 4, 1, 0, 0)
 }
@@ -44,7 +48,7 @@ CreateColoredRectanglePipeline :: proc(gc: ^GraphicsContext) -> ColoredRectangle
 
 	cameraBGL := GetCameraBindGroupLayout(gc)
 	layout := wgpu.PipelineLayoutDescriptor {
-		immediateSize        = size_of(matrix[4, 4]f32),
+		immediateSize        = size_of(RectPC),
 		bindGroupLayoutCount = 1,
 		bindGroupLayouts     = &cameraBGL,
 	}

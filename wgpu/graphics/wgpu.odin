@@ -20,7 +20,6 @@ GraphicsContext :: struct {
 	queue:                    wgpu.Queue,
 	coloredRectanglePipeline: ColoredRectanglePipeline,
 	activeRenderPass:         Maybe(RenderPass),
-	width, height:            u32,
 }
 
 DrawRectangle :: proc {
@@ -53,8 +52,6 @@ CreateGraphicsContext :: proc(windowHandle: glfw.WindowHandle) -> ^GraphicsConte
 
 	width, height := glfw.GetFramebufferSize(windowHandle)
 
-	gc.width = u32(width)
-	gc.height = u32(height)
 	gc.surfaceConfiguration = wgpu.SurfaceConfiguration {
 		device      = gc.device,
 		usage       = {.RenderAttachment},
@@ -65,10 +62,8 @@ CreateGraphicsContext :: proc(windowHandle: glfw.WindowHandle) -> ^GraphicsConte
 		alphaMode   = .Opaque,
 	}
 
-	wgpu.SurfaceConfigure(gc.surface, &gc.surfaceConfiguration)
+	resize(gc, width, height)
 	gc.queue = wgpu.DeviceGetQueue(gc.device)
-
-	gc.coloredRectanglePipeline = CreateColoredRectanglePipeline(gc)
 
 	return gc
 }
@@ -81,6 +76,14 @@ DestroyGraphicsContext :: proc(gc: ^GraphicsContext) {
 	wgpu.SurfaceRelease(gc.surface)
 	wgpu.InstanceRelease(gc.instance)
 	free(gc)
+}
+
+resize :: proc(gc: ^GraphicsContext, width: i32, height: i32) {
+	width := u32(width)
+	height := u32(height)
+	gc.surfaceConfiguration.width = width
+	gc.surfaceConfiguration.height = height
+	wgpu.SurfaceConfigure(gc.surface, &gc.surfaceConfiguration)
 }
 
 RenderPass :: struct {
@@ -102,9 +105,7 @@ BeginRenderPass :: proc(gc: ^GraphicsContext, window: glfw.WindowHandle) -> bool
 			wgpu.TextureRelease(rp.surfaceTexture.texture)
 		}
 		width, height := glfw.GetFramebufferSize(window)
-		gc.surfaceConfiguration.width = u32(width)
-		gc.surfaceConfiguration.height = u32(height)
-		wgpu.SurfaceConfigure(gc.surface, &gc.surfaceConfiguration)
+		resize(gc, width, height)
 		return false
 	case .Occluded:
 		// Window is occluded (e.g. minimized), skip this frame.
