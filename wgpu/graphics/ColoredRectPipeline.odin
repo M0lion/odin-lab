@@ -25,7 +25,9 @@ DrawColoredRectangle :: proc(gc: ^GraphicsContext, rect: ^FRect, color: ^Color, 
 		log.error("Tried to draw rectangle with no active render pass")
 		return
 	}
+	log.info(rect)
 	transform := linalg.matrix4_translate_f32([3]f32{rect.x, rect.y, 0})
+	transform *= linalg.matrix4_scale_f32([3]f32{rect[2], rect[3], 1})
 	rectData := RectPC {
 		transform = transform,
 		color     = color^,

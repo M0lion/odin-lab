@@ -1,8 +1,6 @@
 package main
 
-import "animation"
 import "core:log"
-import "core:math"
 import "core:time"
 import g "graphics"
 import "vendor:glfw"
@@ -22,12 +20,15 @@ main :: proc() {
 
 	camera := g.CreateCamera(gc, [2]f32{7.5, 7.5}, 20)
 
+	playerPos := [2]f32{1, 1}
+	playerRadius: f32 = 0.4
+
 	start := time.tick_now()
 	dt: f32
 	for !glfw.WindowShouldClose(window) {
 		glfw.PollEvents()
 
-		camera.rotation = animation.timer(dt / 4) * math.PI * 2
+		// camera.rotation = animation.timer(dt / 4) * math.PI * 2
 		g.UpdateCamera(&camera, gc)
 		g.BeginRenderPass(gc, window) or_continue
 		defer g.EndRenderPass(gc)
@@ -42,9 +43,21 @@ main :: proc() {
 					color = [4]f32{0, 0, 0, 1}
 				}
 
-				g.DrawRectangle(gc, &[4]f32{f32(x), f32(y), 1, 1}, &color, &camera)
+				g.DrawRectangle(gc, &[4]f32{f32(x) - 0.5, f32(y) - 0.5, 1, 1}, &color, &camera)
 			}
 		}
+
+		g.DrawRectangle(
+			gc,
+			&[4]f32 {
+				playerPos.x - playerRadius,
+				playerPos.y - playerRadius,
+				playerRadius * 2,
+				playerRadius * 2,
+			},
+			&[4]f32{0, 0, 0, 1},
+			&camera,
+		)
 
 		dt = f32(time.duration_seconds(time.tick_since(start)))
 		start = time.tick_now()
