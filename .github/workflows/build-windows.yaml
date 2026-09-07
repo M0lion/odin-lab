@@ -1,0 +1,55 @@
+name: Build Windows
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs Odin + the matching LLVM and puts `odin` on PATH.
+      # See the action's README to pin a specific Odin release.
+      - name: Set up Odin
+        uses: laytan/setup-odin@v2
+
+      - name: Provision wgpu-native
+        shell: pwsh
+        env:
+          # MUST match the version vendor:wgpu was generated against.
+          # Check <odin>/vendor/wgpu/doc.odin — it names the version.
+          WGPU_VERSION: v29.0.1.1
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          # Odin's default Windows build uses the MSVC ABI, so grab the msvc release.
+          $asset = "wgpu-windows-x86_64-msvc-release.zip"
+          $url = "https://github.com/gfx-rs/wgpu-native/releases/download/$env:WGPU_VERSION/$asset"
+          Invoke-WebRequest -Uri $url -OutFile wgpu.zip
+          Expand-Archive wgpu.zip -DestinationPath wgpu-native
+
+          # vendor:wgpu looks in <odin>/vendor/wgpu/lib for the static lib.
+          $odin   = Split-Path (Get-Command odin).Source
+          $libDir = Join-Path $odin "vendor/wgpu/lib"
+          New-Item -ItemType Directory -Force -Path $libDir | Out-Null
+
+          # Pick the static .lib (not the *.dll.lib import stub) and rename to
+          # the name Odin expects for a static release build.
+          $static = Get-ChildItem -Recurse wgpu-native -Filter *.lib |
+                    Where-Object { $_.Name -notlike "*dll*" } | Select-Object -First 1
+          Copy-Item $static.FullName (Join-Path $libDir "wgpu-windows-x86_64-release.lib")
+
+          # Diagnostics: if the name is wrong, the build error will point here.
+          Write-Host "lib dir now contains:"; Get-ChildItem $libDir
+          Select-String -Path (Join-Path $odin "vendor/wgpu/*.odin") -Pattern "foreign import"
+
+      - name: Build
+        run: odin build wgpu -out:labyrinth.exe -o:speed
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-windows
+          path: labyrinth.exe
