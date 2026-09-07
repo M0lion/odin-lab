@@ -19,11 +19,11 @@ Direction :: enum {
 directionToVec :: proc(direction: Direction) -> [2]int {
 	switch direction {
 	case .North:
-		return [2]int{0, -1}
+		return [2]int{0, 1}
 	case .East:
 		return [2]int{1, 0}
 	case .South:
-		return [2]int{0, 1}
+		return [2]int{0, -1}
 	case .West:
 		return [2]int{-1, 0}
 	}
