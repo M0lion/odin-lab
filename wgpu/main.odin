@@ -1,10 +1,10 @@
 package main
 
+import "base:builtin"
 import "base:runtime"
 import "core:c"
 import "core:log"
 import "core:math"
-import "core:math/linalg"
 import "core:time"
 import g "graphics"
 import "vendor:glfw"
@@ -19,11 +19,12 @@ Input: Maybe(Action) = nil
 defaultContext: runtime.Context
 
 TICK_COOLDOWN :: 0.5
-MAP_WIDTH :: 15
-MAP_HEIGHT :: 15
+MAP_WIDTH :: 149
+MAP_HEIGHT :: 149
 GameState :: struct {
 	playerPos: [2]int,
 	level:     [MAP_WIDTH][MAP_HEIGHT]MazeTile,
+	camera:    g.Camera,
 }
 
 keyCallback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: c.int) {
@@ -60,6 +61,35 @@ updateGameState :: proc(gameState: ^GameState, action: Action) -> bool {
 	return false
 }
 
+updateCamera :: proc(gs: ^GameState, screen: [2]f32) {
+	pos := [2]f32{f32(gs.playerPos.x), f32(gs.playerPos.y)}
+
+	mapSizeInScreen := g.worldToScreenVec(&gs.camera, screen, [2]f32{MAP_WIDTH, MAP_HEIGHT})
+	mapSizeInScreen.y = math.abs(mapSizeInScreen.y)
+	screenInWorld := g.screenToWorldVec(&gs.camera, screen, screen)
+	screenInWorld.y = math.abs(screenInWorld.y)
+
+	min := screenInWorld / 2
+	max := [2]f32{MAP_WIDTH, MAP_HEIGHT} - min
+
+	if screen.x > mapSizeInScreen.x {
+		pos.x = MAP_WIDTH / 2
+		log.debug("middle x")
+	} else {
+		pos.x = math.clamp(pos.x, min.x, max.x)
+	}
+	if screen.y > mapSizeInScreen.y {
+		pos.y = MAP_HEIGHT / 2
+		log.debug("middle y")
+	} else {
+		pos.y = math.clamp(pos.y, min.y, max.y)
+	}
+
+	log.debug("Camera pos", pos)
+
+	gs.camera.position = pos
+}
+
 main :: proc() {
 	context.logger = log.create_console_logger(lowest = .Debug)
 	defaultContext = context
@@ -79,7 +109,7 @@ main :: proc() {
 
 	glfw.SetKeyCallback(window, keyCallback)
 
-	camera := g.CreateCamera(gc, [2]f32{7.5, 7.5}, 20)
+	gameState.camera = g.CreateCamera(gc, [2]f32{0, 0}, 20)
 
 	start := time.tick_now()
 	tickCooldown: f32 = 0
@@ -95,9 +125,14 @@ main :: proc() {
 		}
 
 		// camera.rotation = animation.timer(dt / 4) * math.PI * 2
-		g.UpdateCamera(&camera, gc)
 		g.BeginRenderPass(gc, window) or_continue
 		defer g.EndRenderPass(gc)
+
+		updateCamera(
+			&gameState,
+			[2]f32{f32(gc.surfaceConfiguration.width), f32(gc.surfaceConfiguration.height)},
+		)
+		g.UpdateCamera(&gameState.camera, gc)
 
 		// Draw map
 		for row, x in gameState.level {
@@ -110,7 +145,12 @@ main :: proc() {
 					color = [4]f32{0, 0, 0, 1}
 				}
 
-				g.DrawRectangle(gc, &[4]f32{f32(x) - 0.5, f32(y) - 0.5, 1, 1}, &color, &camera)
+				g.DrawRectangle(
+					gc,
+					&[4]f32{f32(x) - 0.5, f32(y) - 0.5, 1, 1},
+					&color,
+					&gameState.camera,
+				)
 			}
 		}
 
@@ -119,7 +159,7 @@ main :: proc() {
 			gc,
 			&[4]f32{f32(gameState.playerPos.x) - 0.4, f32(gameState.playerPos.y) - 0.4, 0.8, 0.8},
 			&[4]f32{0, 0, 0, 1},
-			&camera,
+			&gameState.camera,
 		)
 
 		dt = f32(time.duration_seconds(time.tick_since(start)))

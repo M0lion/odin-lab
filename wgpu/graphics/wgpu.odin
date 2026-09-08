@@ -145,6 +145,11 @@ RenderPass :: struct {
 
 BeginRenderPass :: proc(gc: ^GraphicsContext, window: glfw.WindowHandle) -> bool {
 	rp: RenderPass = {}
+
+	width, height := glfw.GetWindowSize(window)
+	windowSize := [2]u32{u32(width), u32(height)}
+	if windowSize.x != gc.surfaceConfiguration.width || windowSize.y != gc.surfaceConfiguration.height do resize(gc, i32(width), i32(height))
+
 	rp.surfaceTexture = wgpu.SurfaceGetCurrentTexture(gc.surface)
 	switch rp.surfaceTexture.status {
 	case .SuccessOptimal, .SuccessSuboptimal:
